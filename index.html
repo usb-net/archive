@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Archive</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 作品だけが並ぶ暗いライトテーブル。上部に細いヘッダー、下はマソンリー（段組）で画像を詰める */
+:root {
+  --bg: #121315;
+  --surface: #1a1c1f;
+  --line: #2a2d32;
+  --fg: #e6e4df;
+  --muted: #8a8c90;
+  --accent: #d9b77a;
+  --font-ui: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--bg); margin: 0; }
+body {
+  color: var(--fg);
+  font-family: var(--font-ui);
+  padding-inline: clamp(16px, 4vw, 48px);
+  padding-block: 0 64px;
+  min-height: 100vh;
+}
+header {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 5;
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding-block: 20px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 24px;
+}
+h1 { margin: 0; font-size: 18px; font-weight: 500; letter-spacing: 0.04em; }
+.count { font-family: var(--font-data); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; letter-spacing: 0.06em; }
+
+.grid { columns: 4 260px; column-gap: 12px; }
+.tile {
+  display: block; width: 100%;
+  margin: 0 0 12px; padding: 0;
+  border: 0; background: var(--surface);
+  break-inside: avoid; cursor: zoom-in;
+  border-radius: 2px; overflow: hidden;
+}
+.tile img { display: block; width: 100%; height: auto; transition: opacity .2s; }
+.tile:hover img { opacity: .86; }
+.tile:focus-visible, .lb button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.empty {
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+  padding: 72px 24px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.lb {
+  position: fixed; inset: 0; z-index: 30;
+  background: var(--bg);
+  display: grid; grid-template-rows: auto 1fr;
+  padding: env(safe-area-inset-top, 0px) 16px env(safe-area-inset-bottom, 0px);
+}
+.lb-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 14px; }
+.lb-stage { position: relative; display: grid; place-items: center; min-height: 0; padding-bottom: 16px; }
+.lb-stage img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.lb-nav {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 44px; height: 64px; border: 0; cursor: pointer;
+  background: transparent; color: var(--muted); font-size: 28px;
+}
+.lb-nav:hover { color: var(--fg); }
+.lb-prev { left: 0; } .lb-next { right: 0; }
+.lb-close { background: transparent; border: 1px solid var(--line); color: var(--fg); border-radius: 3px; font: inherit; font-size: 13px; padding: 8px 14px; cursor: pointer; }
+
+@media (max-width: 480px) {
+  .grid { columns: 2; column-gap: 8px; }
+  .tile { margin-bottom: 8px; }
+  h1 { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) { .tile img { transition: none; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Archive</h1>
+  <span class="count" id="count"></span>
+</header>
+<main>
+  <div class="grid" id="grid"></div>
+  <p class="empty" id="empty" hidden>まだ画像がありません</p>
+</main>
+
+<div class="lb" id="lb" hidden role="dialog" aria-modal="true" aria-label="画像の拡大表示">
+  <div class="lb-bar">
+    <span class="count" id="lbCount"></span>
+    <button class="lb-close" id="lbClose" type="button">閉じる</button>
+  </div>
+  <div class="lb-stage">
+    <button class="lb-nav lb-prev" id="lbPrev" type="button" aria-label="前の画像">‹</button>
+    <img id="lbImg" alt="">
+    <button class="lb-nav lb-next" id="lbNext" type="button" aria-label="次の画像">›</button>
+  </div>
+</div>
+
+<script src="images.js"></script>
+<script>
+
+(() => {
+  const $ = id => document.getElementById(id);
+  const grid = $("grid"), lb = $("lb"), lbImg = $("lbImg"), lbCount = $("lbCount");
+  const pad = n => String(n).padStart(3, "0");
+  let current = -1;
+
+  $("count").textContent = pad(IMAGES.length) + " items";
+  $("empty").hidden = IMAGES.length > 0;
+  IMAGES.forEach((src, i) => {
+    const b = document.createElement("button");
+    b.className = "tile"; b.type = "button";
+    b.setAttribute("aria-label", "画像 " + (i + 1) + " を拡大");
+    const img = document.createElement("img");
+    img.src = src; img.alt = ""; img.loading = "lazy";
+    b.append(img);
+    b.addEventListener("click", () => open(i));
+    grid.append(b);
+  });
+
+  function open(i) { lb.hidden = false; document.body.style.overflow = "hidden"; show(i); $("lbClose").focus(); }
+  function close() { lb.hidden = true; document.body.style.overflow = ""; current = -1; }
+  function show(i) {
+    current = (i + IMAGES.length) % IMAGES.length;
+    lbImg.src = IMAGES[current];
+    lbCount.textContent = pad(current + 1) + " / " + pad(IMAGES.length);
+  }
+  $("lbClose").addEventListener("click", close);
+  $("lbPrev").addEventListener("click", () => show(current - 1));
+  $("lbNext").addEventListener("click", () => show(current + 1));
+  lbImg.addEventListener("click", () => show(current + 1));
+  document.addEventListener("keydown", e => {
+    if (lb.hidden) return;
+    if (e.key === "Escape") close();
+    if (e.key === "ArrowLeft") show(current - 1);
+    if (e.key === "ArrowRight") show(current + 1);
+  });
+})();
+</script>
+</body>
+</html>
